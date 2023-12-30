@@ -200,6 +200,37 @@ func importWithStream(ctx context.Context, runtime runtimes.Runtime, cluster *k3
 	return nil
 }
 
+// ImageDeleteFromClusterMulti deletes selected images them from the nodes of the selected cluster
+func ImageDeleteFromClusterMulti(ctx context.Context, runtime runtimes.Runtime, images []string, cluster *k3d.Cluster) error {
+	err := deleteImagesInNode(ctx, runtime, cluster, images)
+	if err != nil {
+		return err
+	}
+	l.Log().Infoln("Successfully deleted image(s)")
+	return nil
+}
+
+func deleteImagesInNode(ctx context.Context, runtime runtimes.Runtime, cluster *k3d.Cluster, imageNames []string) error {
+	var deleteWaitGroup sync.WaitGroup
+	for _, imageName := range imageNames {
+		for _, node := range cluster.Nodes {
+			if node.Role == k3d.ServerRole || node.Role == k3d.AgentRole {
+				deleteWaitGroup.Add(1)
+				go func(ctx context.Context, runtime runtimes.Runtime, node *k3d.Node, imageName string) {
+					l.Log().Infof("Deleting images '%s' from node '%s'...", imageNames, node.Name)
+					if err := runtime.ExecInNode(ctx, node, []string{"ctr", "image", "delete", imageName, "--sync"}); err != nil {
+						l.Log().Errorf("failed to delete image '%s' in node '%s': %v", imageName, node.Name, err)
+					}
+					deleteWaitGroup.Done()
+				}(ctx, runtime, node, imageName)
+			}
+		}
+	}
+
+	deleteWaitGroup.Wait()
+	return nil
+}
+
 func loadImageFromStream(ctx context.Context, runtime runtimes.Runtime, stream io.ReadCloser, cluster *k3d.Cluster, imageNames []string) error {
 	var errorGroup errgroup.Group
 

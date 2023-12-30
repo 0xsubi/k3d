@@ -44,6 +44,7 @@ func NewCmdImage() *cobra.Command {
 
 	// add subcommands
 	cmd.AddCommand(NewCmdImageImport())
+	cmd.AddCommand(NewCmdImageDelete())
 
 	// add flags
 
